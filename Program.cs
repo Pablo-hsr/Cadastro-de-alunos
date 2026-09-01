@@ -1,4 +1,8 @@
 ﻿namespace POO;
+using MySqlConnector;
+using System;
+using Microsoft.Extensions.Configuration;
+using System.Collections.Generic;
 
 public class Program
 {
@@ -6,6 +10,31 @@ public class Program
 
     public static void Main()
     {
+
+       
+            string senha = Environment.GetEnvironmentVariable("DB_PASSWORD")??"";
+
+        if (string.IsNullOrEmpty(senha))
+            {
+                Console.WriteLine("Erro: A variável de ambiente DB_PASSWORD não foi encontrada.");
+                return;
+            }
+
+        string stringDeConexao = $"Server=127.0.0.1;User ID=root;Password={senha};Database=escola";
+        using var conexao = new MySqlConnection(stringDeConexao);
+
+        try
+        {
+            conexao.Open();
+            Console.WriteLine("Conectado ao DB com sucesso pai");
+
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine($"deu erro ao conectar ao banco{ex.Message}");
+            return;
+        }
+
         List<Aluno> alunos = new List<Aluno>();
         List<Professor> professores = new List<Professor>();
         List<Curso> cursos = new List<Curso>();
@@ -26,44 +55,67 @@ public class Program
             switch (opcao)
             {
                 case 1:
-                    alunos.Add(CadastrarAluno());
-                break;
+                    Aluno novoAluno = CadastrarAluno();
+                    string sqlinsert = "INSERT INTO Alunos(Matricula, Nome, Idade, Telefone)VALUES(@matricula, @nome, @idade, @telefone)";
+                    using (var cmd = new MySqlCommand(sqlinsert, conexao))
+                    {
+                        cmd.Parameters.AddWithValue("@matricula", novoAluno.Matricula);
+                        cmd.Parameters.AddWithValue("@nome", novoAluno.Nome);
+                        cmd.Parameters.AddWithValue("@idade", novoAluno.Idade);
+                        cmd.Parameters.AddWithValue("@telefone", novoAluno.Telefone);
+
+                        cmd.ExecuteNonQuery();
+
+                    }
+                    Console.WriteLine("aluno cadastrado");
+                    break;
 
                 case 2:
-                if (alunos.Count == 0)
+                    string SqlSelect = "SELECT Matricula, Nome, Idade, Telefone FROM Alunos";
+                    using (var cmd = new MySqlCommand(SqlSelect, conexao))
+                    using (var reader = cmd.ExecuteReader())
+                    {
+
+                        if (!reader.HasRows)
                         {
                             Console.WriteLine("Nenhum aluno cadastrado.");
                         }
                         else
                         {
-                            foreach (Aluno aluno in alunos)
+                            while(reader.Read())
                             {
-                                Console.WriteLine($"Nome: {aluno.Nome}");
-                                Console.WriteLine($"Matrícula: {aluno.Matricula}");
-                                Console.WriteLine($"Idade: {aluno.Idade}");
-                                Console.WriteLine($"Telefone: {aluno.Telefone}\n");
+                                Console.WriteLine($"Matrícula: {reader.GetInt32("Matricula")}");
+                                Console.WriteLine($"Nome: {reader.GetString("Nome")}");
+                                Console.WriteLine($"Idade: {reader.GetInt32("Idade")}");
+                                Console.WriteLine($"Telefone: {reader.GetString("Telefone")}\n");
                             }
+                         
                         }
+                    }
                     break;
 
                 case 3:
                 Console.WriteLine("digite a madricula do aluno: ");
                 int numeroMatricula = Convert.ToInt32(Console.ReadLine());
 
-                bool encontrado = false;
+                string SqlBuscar = "SELECT Nome, Idade, Telefone From Alunos WHERE Matricula = @numeroMatricula";
+                using (var cmd = new MySqlCommand(SqlBuscar, conexao))
+                {
+                    cmd.Parameters.AddWithValue("@numeroMatricula", numeroMatricula);
+                    using var reader = cmd.ExecuteReader();
+                    if(reader.Read())
+                    {
+                        Console.WriteLine($"\nAluno encontrado: {reader.GetString("Nome")}");
+                        Console.WriteLine($"Idade: {reader.GetInt32("Idade")}");
+                        Console.WriteLine($"Telefone: {reader.GetInt32("Telefone")}");
+                    }
+                    else
+                    {
+                        Console.WriteLine("\nMatrícula não encontrada no banco.");
+                    }
 
-                    foreach (Aluno aluno in alunos)
-                    {
-                        if (numeroMatricula == aluno.Matricula)
-                        {
-                            Console.WriteLine($"aluno: {aluno.Nome}");
-                            encontrado = true;
-                        }
-                    }
-                    if (!encontrado)
-                    {
-                        Console.WriteLine("Matricula inexistente");
-                    }
+
+                }
                 break;
             }
 
@@ -81,7 +133,7 @@ public class Program
         int idade = Convert.ToInt32(Console.ReadLine());
 
         Console.WriteLine("digite seu telefone");
-        int telefone = Convert.ToInt32(Console.ReadLine());
+        string telefone = Console.ReadLine() ?? "";
 
         Random random = new Random();
         int matricula = random.Next(1000, 10000);
